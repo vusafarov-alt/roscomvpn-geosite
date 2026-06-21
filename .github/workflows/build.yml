@@ -261,7 +261,7 @@ jobs:
           git checkout master
           git add release/
           git commit -m "Release ${{ env.DAILY_TAG }}" || echo "No changes to commit"
-          git push origin master
+          git push -f origin master
 
       - name: MASTER Publish GitHub Release
         if: github.ref_name == 'master'
