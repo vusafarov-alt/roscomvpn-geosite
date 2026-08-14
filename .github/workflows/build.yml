@@ -281,12 +281,38 @@ jobs:
         run: |
           set -euo pipefail
           cd release || exit 1
+ 
+          # Критичные для роутинга файлы чистим первыми и с retry,
+          # чтобы rate-limit jsDelivr не "съедал" именно их
+          PRIORITY_FILES=(
+           "mihomo/whitelist.mrs"
+           "mihomo/category-ru.mrs"
+           "mihomo/direct.mrs"
+          )
+
+          purge_url() {
+           local url="$1"
+           for attempt in 1 2 3; do
+             resp=$(${{ env.CURL }} -s "$url")
+             if echo "$resp" | grep -q '"status":"finished"' || echo "$resp" | grep -q '"status": "finished"'; then
+               echo "OK: $url"
+               return 0
+             fi
+             echo "Retry $attempt for $url"
+             sleep 2
+           done
+           echo "WARN: could not confirm purge for $url"
+          }
+
+          echo "== Purging priority rule files first =="
+          for rel in "${PRIORITY_FILES[@]}"; do
+          purge_url "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${rel}"
+          done
+
+          echo "== Purging remaining files (best effort) =="
           find . -type f -not -path "./.git/*" -print0 | while IFS= read -r -d '' f; do
             rel="${f#./}"
-            ${{ env.CURL }} -i "https://purge.jsdelivr.net/gh/${{ github.repository }}/release/${rel}"
-            ${{ env.CURL }} -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@master/release/${rel}"
             ${{ env.CURL }} -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${rel}"
-            ${{ env.CURL }} -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@${{ env.DAILY_TAG }}/release/${rel}"
           done
 
       - name: TEST Prepare release directory
